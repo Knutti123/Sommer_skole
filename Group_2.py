@@ -24,8 +24,8 @@ batch_size = 16
 #L for greyscale format
 channel_dim = "L"
 #Height and width of the image
-h=500
-w=500
+h=100
+w=100
 #Input dimension
 input_dim=(h,w)
 
@@ -78,7 +78,7 @@ full_dataset = CustomImageDataset(image_dir=data_root, transform=transform)
 
 
 
-train_size = int(train_alloc * len(full_dataset))
+train_size = int(train_alloc * len(full_dataset))       # Allocate the chosen amount to each category
 val_size = int(val_alloc * len(full_dataset))
 test_size = int(test_alloc * len(full_dataset))
 
@@ -113,12 +113,6 @@ def save_images(dataset, dataset_type):
 # print(f"Test DataLoader length: {len(test_data_loader)}")
 # print(f"Validation DataLoader length: {len(val_data_loader)}")
 #selecting the device
-if torch.cuda.is_available():
-    device = torch.device("cuda")
-    print("Device: GPU")
-else:
-    device = torch.device("cpu")
-    print("Device: CPU")
 
 
 
@@ -148,34 +142,55 @@ val_transform = transforms.Compose([
 class group_2(nn.  Module):
     def   __init__(self):
         super(group_2,  self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
-        self.fc1 = nn.Linear(16000000, 128)
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=7, padding=1, stride=3)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=5, padding=1,stride=2)
+        self.pool = nn.MaxPool2d(kernel_size=2,stride=1,padding=1)
+        self.fc1 = nn.Linear(53824, 128)
         self.fc2 = nn.Linear(128, 64)
         self.fc3 = nn.Linear(64, 10)
         self.relu = nn.ReLU()
 
     def forward(self, x):
         x = self.relu(self.conv1(x))
+        x = self.pool(x)
         x = self.relu(self.conv2(x))
         x = torch.flatten(x, start_dim=1)
         x = self.relu(self.fc1(x))
         x = self.relu(self.fc2(x))
         x = self.fc3(x)
         return x
+
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+    print("Device: GPU")
+else:
+    device = torch.device("cpu")
+    print("Device: CPU")
+
 #initializing the model
 model = group_2().to(device)
+
+#model.load_state_dict(torch.load('group_2.pth'))
+
 #defining the loss function
 criterion = nn.CrossEntropyLoss()
+
+
 #defining the optimizer
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+
 #defining the number of epochs
 num_epochs = 10
+
+
 #defining the lists to store the loss and accuracy
 train_loss_values = []
 val_loss_values = []
 train_accuracy_values = []
 val_accuracy_values = []
+
+
 #training the model
 for epoch in range(num_epochs):
     model.train()
@@ -193,7 +208,7 @@ for epoch in range(num_epochs):
         _, predicted = torch.max(outputs, 1)
         train_total += labels.size(0)
         train_correct += (predicted == labels).sum().item()
-    train_accuracy = train_correct / train_total
+    train_accuracy = 100 * train_correct / train_total
     train_loss_values.append(train_loss / len(train_data_loader))
     train_accuracy_values.append(train_accuracy)
     print(f"Epoch {epoch + 1}/{num_epochs}, Training Loss: {train_loss_values[-1]}, Training Accuracy: {train_accuracy_values[-1]}")
@@ -211,7 +226,9 @@ for epoch in range(num_epochs):
             _, predicted = torch.max(outputs, 1)
             val_total += labels.size(0)
             val_correct += (predicted == labels).sum().item()
-    val_accuracy = val_correct / val_total
+    val_accuracy = 100 * val_correct / val_total
     val_loss_values.append(val_loss / len(val_data_loader))
     val_accuracy_values.append(val_accuracy)
     print(f"Epoch {epoch + 1}/{num_epochs}, Validation Loss: {val_loss_values[-1]}, Validation Accuracy: {val_accuracy_values[-1]}")
+
+    #model._save_to_state_dict(torch.save('group_2.pth'))

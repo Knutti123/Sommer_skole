@@ -230,5 +230,8 @@ for epoch in range(num_epochs):
     val_loss_values.append(val_loss / len(val_data_loader))
     val_accuracy_values.append(val_accuracy)
     print(f"Epoch {epoch + 1}/{num_epochs}, Validation Loss: {val_loss_values[-1]}, Validation Accuracy: {val_accuracy_values[-1]}")
+    if val_accuracy > 95 and val_accuracy > curr_acc:
+        curr_acc = val_accuracy
+        torch.save(model.state_dict(), 'group_2.pth')
 
     #model._save_to_state_dict(torch.save('group_2.pth'))

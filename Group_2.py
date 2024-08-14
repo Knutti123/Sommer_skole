@@ -19,6 +19,7 @@ output_dir = "Python/Project/data"
 train_alloc = 0.7
 val_alloc = 0.2
 test_alloc = 0.1
+curr_acc = 0 #variable for current validation accuarcy
 #Batch size of 16 images.
 batch_size = 16 
 #L for greyscale format

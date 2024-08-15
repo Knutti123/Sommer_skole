@@ -11,6 +11,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from PIL import Image
 import torchvision.transforms as transforms
+import tqdm
+
+
 
 data_root="Project_data/data/data"
 output_dir = "Python/Project/data"
@@ -19,7 +22,6 @@ output_dir = "Python/Project/data"
 train_alloc = 0.7
 val_alloc = 0.2
 test_alloc = 0.1
-curr_acc = 0 #variable for current validation accuarcy
 #Batch size of 16 images.
 batch_size = 16 
 #L for greyscale format
@@ -29,6 +31,11 @@ h=100
 w=100
 #Input dimension
 input_dim=(h,w)
+
+
+reg_fac = 0.01  #Regulateing factor
+
+
 
 class CustomImageDataset(Dataset):
     def __init__(self, image_dir, transform=None):
@@ -192,47 +199,94 @@ train_accuracy_values = []
 val_accuracy_values = []
 
 
-#training the model
-for epoch in range(num_epochs):
+def train(model, train_loader, loss_fn, optimizer, device):
     model.train()
-    train_loss = 0.0
-    train_correct = 0
-    train_total = 0
-    for i, (images, labels) in enumerate(train_data_loader):
+    running_loss = 0.0
+    correct = 0
+    total = 0
+
+    for images, labels in tqdm(train_loader):
         images, labels = images.to(device), labels.to(device)
+
         optimizer.zero_grad()
+
         outputs = model(images)
-        loss = criterion(outputs, labels)
+        loss = loss_fn(outputs, labels)
+        loss += reg_fac *torch.norm(model.fc2.weight, P=1) #P=1 is L1 P=2 is L2 
+
         loss.backward()
         optimizer.step()
-        train_loss += loss.item()
+
+        running_loss += loss.item() * images.size(0)
         _, predicted = torch.max(outputs, 1)
-        train_total += labels.size(0)
-        train_correct += (predicted == labels).sum().item()
-    train_accuracy = 100 * train_correct / train_total
-    train_loss_values.append(train_loss / len(train_data_loader))
-    train_accuracy_values.append(train_accuracy)
-    print(f"Epoch {epoch + 1}/{num_epochs}, Training Loss: {train_loss_values[-1]}, Training Accuracy: {train_accuracy_values[-1]}")
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
 
+    epoch_loss = running_loss / total
+    epoch_accuracy = correct / total
+
+    return epoch_loss, epoch_accuracy
+
+
+
+def test(model, test_loader, loss_fn, device):
     model.eval()
-    val_loss = 0.0
-    val_correct = 0
-    val_total = 0
-    with torch.no_grad():
-        for images, labels in val_data_loader:
-            images, labels = images.to(device), labels.to(device)
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            val_loss += loss.item()
-            _, predicted = torch.max(outputs, 1)
-            val_total += labels.size(0)
-            val_correct += (predicted == labels).sum().item()
-    val_accuracy = 100 * val_correct / val_total
-    val_loss_values.append(val_loss / len(val_data_loader))
-    val_accuracy_values.append(val_accuracy)
-    print(f"Epoch {epoch + 1}/{num_epochs}, Validation Loss: {val_loss_values[-1]}, Validation Accuracy: {val_accuracy_values[-1]}")
-    if val_accuracy > 95 and val_accuracy > curr_acc:
-        curr_acc = val_accuracy
-        torch.save(model.state_dict(), 'group_2.pth')
+    running_loss = 0.0
+    correct = 0
+    total = 0
 
-    #model._save_to_state_dict(torch.save('group_2.pth'))
+    with torch.no_grad():
+        for images, labels in tqdm(test_loader):
+            images, labels = images.to(device), labels.to(device)
+
+            outputs = model(images)
+            loss = loss_fn(outputs, labels)
+
+            running_loss += loss.item() * images.size(0)
+            _, predicted = torch.max(outputs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    epoch_loss = running_loss / total
+    epoch_accuracy = correct / total
+    return epoch_loss, epoch_accuracy
+
+
+def train_model(model, train_loader, val_loader, loss_fn, optimizer, num_epochs, device, patience=5):
+    train_losses, val_losses = [], []
+    train_accuracies, val_accuracies = [], []
+
+    best_val_loss = float('inf')
+    epochs_without_improvement = 0
+
+    for epoch in range(num_epochs):
+        train_loss, train_accuracy = train(model, train_loader, loss_fn, optimizer, device)
+        val_loss, val_accuracy = test(model, val_loader, loss_fn, device)
+
+        train_losses.append(train_loss)
+        val_losses.append(val_loss)
+        train_accuracies.append(train_accuracy)
+        val_accuracies.append(val_accuracy)
+
+        print(f"Epoch {epoch + 1}/{num_epochs}")
+        print(f"Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.4f}")
+        print(f"Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.4f}")
+
+        # Early Stopping
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            epochs_without_improvement = 0
+            torch.save(model.state_dict(), 'model5.pth')
+        else:
+            epochs_without_improvement += 1
+            if epochs_without_improvement >= patience:
+                print(f"Early stopping triggered after {epoch + 1} epochs")
+                break
+
+    # Load the best model
+    model.load_state_dict(torch.load('model5.pth'))
+
+trained_model = train_model(model=group_2, train_loader=train_data_loader, val_loader=val_data_loader,
+                            loss_fn=criterion, optimizer=optimizer, num_epochs=num_epochs, device=device)
+test_loss, test_accuracy = test(trained_model, test_data_loader, criterion, device)
+print(f"Final Test Loss: {test_loss:.4f}, Final Test Accuracy: {test_accuracy:.4f}")
